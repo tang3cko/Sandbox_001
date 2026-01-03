@@ -1,0 +1,279 @@
+// Rain.compute
+// GPU particle simulation for rain
+// Handles physics (gravity, wind, respawn) and frustum culling
+// Optimized to minimize divergent branches
+
+#pragma kernel InitRain
+#pragma kernel UpdateRain
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+// Physics
+static const float DEFAULT_FALL_SPEED_MIN = 8.0;
+static const float DEFAULT_FALL_SPEED_RANGE = 4.0;
+static const float DEFAULT_WIND_VARIANCE = 2.0;
+static const float DEFAULT_WIND_FACTOR = 5.0;
+static const float DEFAULT_WIND_DAMPING = 0.99;
+
+// Rain drop
+static const float DEFAULT_DROP_SIZE_MIN = 0.02;
+static const float DEFAULT_DROP_SIZE_RANGE = 0.015;
+static const float DEFAULT_DROP_ALPHA_MIN = 0.4;
+static const float DEFAULT_DROP_ALPHA_RANGE = 0.3;
+
+// Sparkle
+static const float DEFAULT_SPARKLE_SPEED_MIN = 8.0;
+static const float DEFAULT_SPARKLE_SPEED_RANGE = 12.0;
+static const float TWO_PI = 6.28318;
+
+// Respawn
+static const float RESPAWN_HEIGHT_OFFSET = 5.0;
+static const float BOUNDS_WRAP_MARGIN = 1.0;
+
+// Frustum margins
+static const float FRUSTUM_HORIZONTAL_MARGIN = 0.3;
+static const float FRUSTUM_TOP_MARGIN = 2.0;
+static const float FRUSTUM_BOTTOM_MARGIN = 0.3;
+
+// =============================================================================
+// RainDrop Structure (48 bytes)
+// =============================================================================
+
+struct RainDrop
+{
+    float3 position;      // 12 bytes
+    float size;           // 4 bytes
+    float3 velocity;      // 12 bytes
+    float alpha;          // 4 bytes
+    float lifetime;       // 4 bytes (unused, for padding)
+    float sparklePhase;   // 4 bytes
+    float sparkleSpeed;   // 4 bytes
+    float padding;        // 4 bytes
+};
+
+// =============================================================================
+// Buffers
+// =============================================================================
+
+RWStructuredBuffer<RainDrop> _Drops;
+AppendStructuredBuffer<RainDrop> _VisibleDrops;
+
+// =============================================================================
+// Simulation Parameters (set by RainRenderPass)
+// =============================================================================
+
+float _DeltaTime;
+float _Time;
+uint _FrameCount;
+float _SpawnRadius;
+float _HeightMin;
+float _HeightMax;
+float _Gravity;
+float _CullDistance;
+float _RainDropScale;
+float3 _CameraPosition;
+float4x4 _ViewProjectionMatrix;
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+uint Hash(uint x)
+{
+    x ^= x >> 16;
+    x *= 0x85ebca6b;
+    x ^= x >> 13;
+    x *= 0xc2b2ae35;
+    x ^= x >> 16;
+    return x;
+}
+
+float RandomFloat(inout uint seed)
+{
+    seed = Hash(seed);
+    return float(seed) / float(0xFFFFFFFF);
+}
+
+// Branch-free frustum test: returns 1.0 if visible, 0.0 if not
+float GetFrustumVisibility(float3 worldPos)
+{
+    float4 clipPos = mul(_ViewProjectionMatrix, float4(worldPos, 1.0));
+
+    // step(edge, x) returns 1.0 if x >= edge, else 0.0
+    float behindCamera = step(clipPos.w, 0.0);
+
+    float3 ndc = clipPos.xyz / max(clipPos.w, 0.0001);
+
+    // Check each frustum plane and combine with multiplication
+    float inLeft   = step(-1.0 - FRUSTUM_HORIZONTAL_MARGIN, ndc.x);
+    float inRight  = step(ndc.x, 1.0 + FRUSTUM_HORIZONTAL_MARGIN);
+    float inBottom = step(-1.0 - FRUSTUM_BOTTOM_MARGIN, ndc.y);
+    float inTop    = step(ndc.y, 1.0 + FRUSTUM_TOP_MARGIN);
+    float inNear   = step(0.0, ndc.z);
+    float inFar    = step(ndc.z, 1.0);
+
+    // Combine all conditions: 1.0 only if all pass
+    float inFrustum = inLeft * inRight * inBottom * inTop * inNear * inFar;
+
+    // Return 0.0 if behind camera, otherwise return frustum result
+    return inFrustum * (1.0 - behindCamera);
+}
+
+// =============================================================================
+// Rain Drop Helpers
+// =============================================================================
+
+float3 GenerateRandomPosition(inout uint seed)
+{
+    float angle = RandomFloat(seed) * TWO_PI;
+    float r = sqrt(RandomFloat(seed)) * _SpawnRadius;
+
+    return float3(
+        _CameraPosition.x + cos(angle) * r,
+        _CameraPosition.y + lerp(_HeightMin, _HeightMax, RandomFloat(seed)),
+        _CameraPosition.z + sin(angle) * r
+    );
+}
+
+float3 GenerateRandomVelocity(inout uint seed)
+{
+    return float3(
+        (RandomFloat(seed) - 0.5) * DEFAULT_WIND_VARIANCE,
+        -DEFAULT_FALL_SPEED_MIN - RandomFloat(seed) * DEFAULT_FALL_SPEED_RANGE,
+        (RandomFloat(seed) - 0.5) * DEFAULT_WIND_VARIANCE
+    );
+}
+
+float GenerateRandomSize(inout uint seed)
+{
+    // Use lerp + step instead of ternary to avoid branch
+    // If _RainDropScale > 0, use it; otherwise use 1.0
+    float scale = lerp(1.0, _RainDropScale, step(0.0001, _RainDropScale));
+    return (DEFAULT_DROP_SIZE_MIN + RandomFloat(seed) * DEFAULT_DROP_SIZE_RANGE) * scale;
+}
+
+float GenerateRandomAlpha(inout uint seed)
+{
+    return DEFAULT_DROP_ALPHA_MIN + RandomFloat(seed) * DEFAULT_DROP_ALPHA_RANGE;
+}
+
+void GenerateRandomSparkle(inout uint seed, out float phase, out float speed)
+{
+    phase = RandomFloat(seed) * TWO_PI;
+    speed = DEFAULT_SPARKLE_SPEED_MIN + RandomFloat(seed) * DEFAULT_SPARKLE_SPEED_RANGE;
+}
+
+void InitializeRainDrop(out RainDrop drop, inout uint seed)
+{
+    drop.position = GenerateRandomPosition(seed);
+    drop.velocity = GenerateRandomVelocity(seed);
+    drop.size = GenerateRandomSize(seed);
+    drop.alpha = GenerateRandomAlpha(seed);
+    drop.lifetime = 0;
+    GenerateRandomSparkle(seed, drop.sparklePhase, drop.sparkleSpeed);
+    drop.padding = 0;
+}
+
+// Generate respawn position (always computed, blended via lerp)
+float3 GenerateRespawnPosition(inout uint seed)
+{
+    float angle = RandomFloat(seed) * TWO_PI;
+    float r = sqrt(RandomFloat(seed)) * _SpawnRadius;
+
+    return float3(
+        _CameraPosition.x + cos(angle) * r,
+        _CameraPosition.y + _HeightMax + RandomFloat(seed) * RESPAWN_HEIGHT_OFFSET,
+        _CameraPosition.z + sin(angle) * r
+    );
+}
+
+// =============================================================================
+// Kernel: InitRain
+// =============================================================================
+
+[numthreads(128, 1, 1)]
+void InitRain(uint3 id : SV_DispatchThreadID)
+{
+    uint seed = Hash(id.x * 1973 + 12345);
+
+    RainDrop drop;
+    InitializeRainDrop(drop, seed);
+
+    _Drops[id.x] = drop;
+}
+
+// =============================================================================
+// Kernel: UpdateRain
+// =============================================================================
+
+[numthreads(128, 1, 1)]
+void UpdateRain(uint3 id : SV_DispatchThreadID)
+{
+    RainDrop drop = _Drops[id.x];
+    uint seed = Hash(id.x * 1973 + _FrameCount * 9277);
+
+    // Apply gravity
+    drop.velocity.y -= _Gravity * _DeltaTime;
+
+    // Update position
+    drop.position += drop.velocity * _DeltaTime;
+
+    // Wind variation
+    float2 windDelta = float2(
+        (RandomFloat(seed) - 0.5) * DEFAULT_WIND_FACTOR * _DeltaTime,
+        (RandomFloat(seed) - 0.5) * DEFAULT_WIND_FACTOR * _DeltaTime
+    );
+    drop.velocity.xz = drop.velocity.xz * DEFAULT_WIND_DAMPING + windDelta;
+
+    // Update sparkle phase (use fmod instead of branch)
+    drop.sparklePhase = fmod(drop.sparklePhase + drop.sparkleSpeed * _DeltaTime, TWO_PI);
+
+    // --- Respawn logic (branch-free using lerp) ---
+    // Compute respawn data unconditionally
+    float3 respawnPos = GenerateRespawnPosition(seed);
+    float3 respawnVel = GenerateRandomVelocity(seed);
+    float respawnSize = GenerateRandomSize(seed);
+    float respawnAlpha = GenerateRandomAlpha(seed);
+    float respawnSparklePhase, respawnSparkleSpeed;
+    GenerateRandomSparkle(seed, respawnSparklePhase, respawnSparkleSpeed);
+
+    // Determine if respawn is needed (1.0 = need respawn, 0.0 = keep current)
+    float needsRespawn = step(drop.position.y, _CameraPosition.y + _HeightMin);
+
+    // Blend between current and respawn values
+    drop.position = lerp(drop.position, respawnPos, needsRespawn);
+    drop.velocity = lerp(drop.velocity, respawnVel, needsRespawn);
+    drop.size = lerp(drop.size, respawnSize, needsRespawn);
+    drop.alpha = lerp(drop.alpha, respawnAlpha, needsRespawn);
+    drop.sparklePhase = lerp(drop.sparklePhase, respawnSparklePhase, needsRespawn);
+    drop.sparkleSpeed = lerp(drop.sparkleSpeed, respawnSparkleSpeed, needsRespawn);
+
+    // --- Cylindrical bounds wrap (branch-free using lerp) ---
+    float2 offset = drop.position.xz - _CameraPosition.xz;
+    float dist = length(offset);
+    float2 dir = offset / max(dist, 0.0001);
+    float2 wrappedPos = _CameraPosition.xz - dir * _SpawnRadius;
+
+    // Determine if wrap is needed
+    float needsWrap = step(_SpawnRadius + BOUNDS_WRAP_MARGIN, dist);
+
+    // Blend between current and wrapped position
+    drop.position.xz = lerp(drop.position.xz, wrappedPos, needsWrap);
+
+    // Write back
+    _Drops[id.x] = drop;
+
+    // --- Visibility culling ---
+    float distToCamera = length(drop.position - _CameraPosition);
+    float inDistance = step(distToCamera, _CullDistance);
+    float inFrustum = GetFrustumVisibility(drop.position);
+    float isVisible = inDistance * inFrustum;
+
+    // Append requires branch, but condition is now a single float comparison
+    if (isVisible > 0.5)
+    {
+        _VisibleDrops.Append(drop);
+    }
+}
