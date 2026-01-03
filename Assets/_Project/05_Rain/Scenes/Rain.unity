@@ -814,6 +814,7 @@ GameObject:
   - component: {fileID: 748331306}
   - component: {fileID: 748331308}
   - component: {fileID: 748331307}
+  - component: {fileID: 748331309}
   m_Layer: 0
   m_Name: Light
   m_TagString: Untagged
@@ -930,6 +931,21 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &748331309
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 748331305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c8bca95f7c947b4db5fb152a0d693d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: com.cqf.urpvolumetricfog.runtime::VolumetricAdditionalLight
+  anisotropy: 0.25
+  scattering: 1
+  radius: 0.2
 --- !u!1 &760787610
 GameObject:
   m_ObjectHideFlags: 0
