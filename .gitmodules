@@ -1,0 +1,3 @@
+[submodule "docs/05_standards"]
+	path = docs/05_standards
+	url = git@github.com:tang3cko/standards.git
