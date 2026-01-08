@@ -92,6 +92,10 @@ RainRendererFeature (URP Renderer Feature)
 - [ ] Multi-camera support
 - [ ] VR stereo rendering optimization
 - [ ] Integration with VolumetricFog light scattering
+- [ ] **Packaging & Automation**:
+    - [ ] Structure for UPM (Runtime/Samples folders, asmdef, package.json)
+    - [ ] Editor script to auto-add `RainRendererFeature` to active URP Renderer
+    - [ ] Auto-assign `Rain.compute` and `Rain.mat` references upon setup
 
 ---
 
