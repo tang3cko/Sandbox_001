@@ -1,0 +1,62 @@
+/* ========================================
+   Design Tokens
+   ======================================== */
+:root {
+    /* Color Tokens */
+    --color-primary: #FFD700;
+    --color-primary-hover: #FFA500;
+    --color-secondary: #1E90FF;
+    --color-success: #32CD32;
+    --color-danger: #FF6347;
+    --color-warning: #FFA500;
+    --color-background: rgba(0, 0, 0, 0.85);
+    --color-panel: rgba(30, 30, 30, 0.95);
+    --color-text: #FFFFFF;
+    --color-text-muted: rgba(255, 255, 255, 0.6);
+
+    /* Font Size Tokens */
+    --font-size-large: 24px;
+    --font-size-medium: 18px;
+    --font-size-small: 14px;
+
+    /* Spacing Tokens */
+    --padding-large: 16px;
+    --padding-medium: 12px;
+    --padding-small: 8px;
+    --margin-large: 16px;
+    --margin-medium: 12px;
+    --margin-small: 8px;
+
+    /* Border Tokens */
+    --border-width: 2px;
+    --border-radius: 4px;
+    --border-radius-large: 8px;
+}
+
+/* ========================================
+   Common Components
+   ======================================== */
+
+.panel {
+    background-color: var(--color-panel);
+    border-radius: var(--border-radius-large);
+    padding: var(--padding-large);
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.text-title {
+    font-size: var(--font-size-large);
+    color: var(--color-primary);
+    -unity-font-style: bold;
+}
+
+.text-body {
+    font-size: var(--font-size-medium);
+    color: var(--color-text);
+}
+
+.text-small {
+    font-size: var(--font-size-small);
+    color: var(--color-text-muted);
+}

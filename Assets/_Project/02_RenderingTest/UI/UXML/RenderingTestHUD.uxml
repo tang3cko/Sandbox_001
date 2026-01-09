@@ -1,0 +1,68 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="../USS/Common.uss" />
+    <Style src="../USS/RenderingTestUI.uss" />
+
+    <ui:VisualElement name="Root" class="rendering-test__root">
+        <!-- Left Container -->
+        <ui:VisualElement class="rendering-test__left-container">
+            <!-- Mode Panel -->
+            <ui:VisualElement name="ModePanel" class="rendering-test__mode-panel">
+                <ui:Label text="Rendering Mode" class="rendering-test__mode-title" />
+                <ui:DropdownField name="ModeDropdown" class="rendering-test__mode-dropdown" />
+                <ui:Label name="ModeHint" text="Press [R] to cycle modes" class="rendering-test__mode-hint" />
+            </ui:VisualElement>
+
+            <!-- Light Panel -->
+            <ui:VisualElement name="LightPanel" class="rendering-test__light-panel">
+                <ui:Label text="Light Control" class="rendering-test__light-title" />
+                <ui:Label name="LightCountText" text="0 / 200" class="rendering-test__light-count" />
+                <ui:SliderInt name="LightSlider" low-value="0" high-value="200" class="rendering-test__light-slider" />
+                <ui:VisualElement class="rendering-test__light-buttons">
+                    <ui:Button name="RemoveLightsButton" text="-10" class="rendering-test__light-button rendering-test__light-button--first" />
+                    <ui:Button name="AddLightsButton" text="+10" class="rendering-test__light-button rendering-test__light-button--last" />
+                </ui:VisualElement>
+                <ui:Toggle name="AnimationToggle" label="Animate Lights" value="true" class="rendering-test__animation-toggle" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Stats Panel (Right) -->
+        <ui:VisualElement name="StatsPanel" class="rendering-test__stats-panel">
+            <ui:Label text="Performance" class="rendering-test__stats-title" />
+
+            <ui:VisualElement class="rendering-test__stats-row">
+                <ui:Label text="FPS" class="rendering-test__stats-label" />
+                <ui:Label name="FPSValue" text="0" class="rendering-test__stats-value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rendering-test__stats-row">
+                <ui:Label text="Frame Time" class="rendering-test__stats-label" />
+                <ui:Label name="FrameTimeValue" text="0 ms" class="rendering-test__stats-value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rendering-test__stats-row">
+                <ui:Label text="Draw Calls" class="rendering-test__stats-label" />
+                <ui:Label name="DrawCallsValue" text="0" class="rendering-test__stats-value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rendering-test__stats-row">
+                <ui:Label text="Batches" class="rendering-test__stats-label" />
+                <ui:Label name="BatchesValue" text="0" class="rendering-test__stats-value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rendering-test__stats-row">
+                <ui:Label text="SetPass Calls" class="rendering-test__stats-label" />
+                <ui:Label name="SetPassCallsValue" text="0" class="rendering-test__stats-value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rendering-test__stats-row">
+                <ui:Label text="Triangles" class="rendering-test__stats-label" />
+                <ui:Label name="TrianglesValue" text="0" class="rendering-test__stats-value" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Controls Hint (Bottom Center) -->
+        <ui:VisualElement class="rendering-test__controls-hint">
+            <ui:Label text="[R] Cycle Mode | [Up/Down] Lights | [A] Animation | [F1] Toggle UI" class="rendering-test__controls-text" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
