@@ -29,8 +29,10 @@ Shader "Prism/Rain"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #pragma instancing_options procedural:setup
+            #pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             // =================================================================
             // Data Structures (must match C# structs)
@@ -59,8 +61,8 @@ Shader "Prism/Rain"
                 float intensity;
                 float innerSpotAngle;
                 int lightType;      // 0 = Point, 1 = Spot
-                float padding1;
-                float padding2;
+                int lightIndex;     // URP additional light index for shadow lookup
+                float padding;
             };
 
             // =================================================================
@@ -159,6 +161,16 @@ Shader "Prism/Rain"
                 return distAtten * coneAtten;
             }
 
+            // Shadow sampling for additional lights
+            half GetAdditionalLightShadowAttenuation(int lightIndex, float3 positionWS, half3 lightDirection)
+            {
+                #if defined(ADDITIONAL_LIGHT_CALCULATE_SHADOWS)
+                    return AdditionalLightRealtimeShadow(lightIndex, positionWS, lightDirection);
+                #else
+                    return half(1.0);
+                #endif
+            }
+
             // Calculate contribution from a single light
             void CalculateLightContribution(
                 float3 dropPos,
@@ -181,12 +193,15 @@ Shader "Prism/Rain"
                     atten = CalculatePointLightAttenuation(dropPos, light);
                 }
 
+                // Shadow attenuation
+                half shadowAtten = GetAdditionalLightShadowAttenuation(light.lightIndex, dropPos, toLightDir);
+
                 // Height factor (rain above light is less visible)
                 float heightDiff = dropPos.y - light.position.y;
                 float heightFactor = saturate(1.0 - heightDiff * 0.5);
                 heightFactor *= heightFactor;
 
-                float influence = atten * heightFactor;
+                float influence = atten * heightFactor * shadowAtten;
 
                 // Rim lighting effect
                 float rim = 1.0 - saturate(dot(viewDir, -toLightDir));

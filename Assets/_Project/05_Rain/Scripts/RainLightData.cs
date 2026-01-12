@@ -18,8 +18,8 @@ namespace Prism.Rain
         public float intensity;
         public float innerSpotAngle; // degrees, 0 for point lights
         public int lightType;        // 0 = Point, 1 = Spot
-        public float padding1;
-        public float padding2;
+        public int lightIndex;       // URP additional light index for shadow lookup
+        public float padding;
 
         /// <summary>
         /// Size in bytes (must be multiple of 16 for GPU alignment).
@@ -27,7 +27,7 @@ namespace Prism.Rain
         /// </summary>
         public static int Stride => sizeof(float) * 16;
 
-        public static RainLightData FromLight(Light light)
+        public static RainLightData FromLight(Light light, int additionalLightIndex)
         {
             var data = new RainLightData
             {
@@ -35,7 +35,8 @@ namespace Prism.Rain
                 range = light.range,
                 color = new Vector3(light.color.r, light.color.g, light.color.b),
                 intensity = light.intensity,
-                lightType = light.type == LightType.Spot ? 1 : 0
+                lightType = light.type == LightType.Spot ? 1 : 0,
+                lightIndex = additionalLightIndex
             };
 
             if (light.type == LightType.Spot)

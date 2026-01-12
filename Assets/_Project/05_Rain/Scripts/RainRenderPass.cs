@@ -161,7 +161,7 @@ namespace Prism.Rain
             var lightData = frameData.Get<UniversalLightData>();
             var resourceData = frameData.Get<UniversalResourceData>();
 
-            int lightCount = CollectLights(lightData.visibleLights, lightData.additionalLightsCount);
+            int lightCount = CollectLights(lightData.visibleLights, lightData.additionalLightsCount, lightData.mainLightIndex);
             lightBuffer.SetData(lightDataArray);
 
             frameCount++;
@@ -263,9 +263,10 @@ namespace Prism.Rain
             }
         }
 
-        private int CollectLights(NativeArray<VisibleLight> visibleLights, int additionalLightsCount)
+        private int CollectLights(NativeArray<VisibleLight> visibleLights, int additionalLightsCount, int mainLightIndex)
         {
             int lightCount = 0;
+            int additionalLightIndex = 0;
 
             for (int i = 0; i < MAX_RAIN_LIGHTS; i++)
             {
@@ -275,20 +276,38 @@ namespace Prism.Rain
             int maxIndex = Mathf.Min(visibleLights.Length, additionalLightsCount + 1);
             for (int i = 0; i < maxIndex && lightCount < MAX_RAIN_LIGHTS; i++)
             {
+                // Skip main light (it's not an additional light)
+                if (i == mainLightIndex)
+                    continue;
+
                 Light light = visibleLights[i].light;
-                if (light == null) continue;
+                if (light == null)
+                {
+                    additionalLightIndex++;
+                    continue;
+                }
 
                 if (!light.TryGetComponent<RainAdditionalLight>(out var rainLight))
+                {
+                    additionalLightIndex++;
                     continue;
+                }
 
                 if (!rainLight.enabled || !rainLight.gameObject.activeInHierarchy)
+                {
+                    additionalLightIndex++;
                     continue;
+                }
 
                 if (light.type != LightType.Point && light.type != LightType.Spot)
+                {
+                    additionalLightIndex++;
                     continue;
+                }
 
-                lightDataArray[lightCount] = RainLightData.FromLight(light);
+                lightDataArray[lightCount] = RainLightData.FromLight(light, additionalLightIndex);
                 lightCount++;
+                additionalLightIndex++;
             }
 
             return lightCount;
