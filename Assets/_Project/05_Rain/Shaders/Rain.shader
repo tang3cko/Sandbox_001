@@ -29,13 +29,11 @@ Shader "Prism/Rain"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #pragma instancing_options procedural:setup
-            #pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             // =================================================================
-            // Data Structures (must match C# structs)
+            // Data Structures (must match Rain.compute)
             // =================================================================
 
             struct RainDrop
@@ -44,24 +42,11 @@ Shader "Prism/Rain"
                 float size;
                 float3 velocity;
                 float alpha;
-                float lifetime;
                 float sparklePhase;
                 float sparkleSpeed;
-                float padding;
-            };
-
-            // RainLightData: 64 bytes (must match RainLightData.cs)
-            struct RainLightData
-            {
-                float3 position;
-                float range;
-                float3 direction;
-                float spotAngle;
-                float3 color;
-                float intensity;
-                float innerSpotAngle;
-                int lightType;      // 0 = Point, 1 = Spot
-                int lightIndex;     // URP additional light index for shadow lookup
+                float litContribution;
+                float sparkleIntensity;
+                float3 litColor;
                 float padding;
             };
 
@@ -70,8 +55,6 @@ Shader "Prism/Rain"
             // =================================================================
 
             StructuredBuffer<RainDrop> _RainBuffer;
-            StructuredBuffer<RainLightData> _LightBuffer;
-            int _LightCount;
 
             // =================================================================
             // Material Properties
@@ -130,90 +113,9 @@ Shader "Prism/Rain"
                 return _RainLitAlpha > 0 ? _RainLitAlpha : _LitAlpha;
             }
 
-            // Point light attenuation (cubic falloff)
-            float CalculatePointLightAttenuation(float3 pos, RainLightData light)
-            {
-                float3 toLight = light.position - pos;
-                float dist = length(toLight);
-                float distAtten = saturate(1.0 - dist / light.range);
-                distAtten *= distAtten * distAtten;
-                return distAtten;
-            }
-
-            // Spot light attenuation (distance + cone)
-            float CalculateSpotLightAttenuation(float3 pos, RainLightData light)
-            {
-                float3 toLight = light.position - pos;
-                float dist = length(toLight);
-
-                // Distance attenuation
-                float distAtten = saturate(1.0 - dist / light.range);
-                distAtten *= distAtten * distAtten;
-
-                // Cone attenuation
-                float3 fromLightDir = normalize(pos - light.position);
-                float3 lightForward = normalize(light.direction);
-                float cosAngle = dot(fromLightDir, lightForward);
-                float outerCos = cos(radians(light.spotAngle * 0.5));
-                float innerCos = cos(radians(light.innerSpotAngle * 0.5));
-                float coneAtten = smoothstep(outerCos, innerCos, cosAngle);
-
-                return distAtten * coneAtten;
-            }
-
-            // Shadow sampling for additional lights
-            half GetAdditionalLightShadowAttenuation(int lightIndex, float3 positionWS, half3 lightDirection)
-            {
-                #if defined(ADDITIONAL_LIGHT_CALCULATE_SHADOWS)
-                    return AdditionalLightRealtimeShadow(lightIndex, positionWS, lightDirection);
-                #else
-                    return half(1.0);
-                #endif
-            }
-
-            // Calculate contribution from a single light
-            void CalculateLightContribution(
-                float3 dropPos,
-                float3 viewDir,
-                RainLightData light,
-                inout float totalContribution,
-                inout float3 totalColor)
-            {
-                float3 toLightDir = normalize(light.position - dropPos);
-                float atten;
-
-                if (light.lightType == 1)
-                {
-                    // Spot light
-                    atten = CalculateSpotLightAttenuation(dropPos, light);
-                }
-                else
-                {
-                    // Point light
-                    atten = CalculatePointLightAttenuation(dropPos, light);
-                }
-
-                // Shadow attenuation
-                half shadowAtten = GetAdditionalLightShadowAttenuation(light.lightIndex, dropPos, toLightDir);
-
-                // Height factor (rain above light is less visible)
-                float heightDiff = dropPos.y - light.position.y;
-                float heightFactor = saturate(1.0 - heightDiff * 0.5);
-                heightFactor *= heightFactor;
-
-                float influence = atten * heightFactor * shadowAtten;
-
-                // Rim lighting effect
-                float rim = 1.0 - saturate(dot(viewDir, -toLightDir));
-                rim = pow(rim, 2.0);
-
-                float contribution = rim * influence * light.intensity;
-                totalContribution += contribution;
-                totalColor += light.color * contribution;
-            }
-
             // =================================================================
             // Vertex Shader
+            // Lighting is precomputed in Rain.compute — no light loop here.
             // =================================================================
 
             void setup() {}
@@ -229,35 +131,13 @@ Shader "Prism/Rain"
                 float2 quadPos = QuadPositions[vertexID] * drop.size;
                 float3 worldPos = drop.position + cameraRight * quadPos.x + cameraUp * quadPos.y;
 
-                // View direction
-                float3 viewDir = normalize(_WorldSpaceCameraPos - drop.position);
-
-                // Accumulate light contributions
-                float totalContribution = 0.0;
-                float3 totalColor = float3(0, 0, 0);
-
-                for (int i = 0; i < _LightCount; i++)
-                {
-                    RainLightData light = _LightBuffer[i];
-                    CalculateLightContribution(drop.position, viewDir, light, totalContribution, totalColor);
-                }
-
-                // Sparkle effect (only when lit)
-                float sparkleIntensity = 0.0;
-                if (totalContribution > 0.1)
-                {
-                    float sparkle = sin(drop.sparklePhase) * 0.5 + 0.5;
-                    sparkle = pow(sparkle, 8.0);
-                    sparkleIntensity = sparkle * totalContribution * 2.0;
-                }
-
                 VertexOutput o;
                 o.positionCS = TransformWorldToHClip(worldPos);
                 o.uv = QuadTexCoords[vertexID];
                 o.alpha = drop.alpha;
-                o.rimLight = saturate(totalContribution);
-                o.sparkle = sparkleIntensity;
-                o.color = totalColor;
+                o.rimLight = drop.litContribution;
+                o.sparkle = drop.sparkleIntensity;
+                o.color = drop.litColor;
 
                 return o;
             }

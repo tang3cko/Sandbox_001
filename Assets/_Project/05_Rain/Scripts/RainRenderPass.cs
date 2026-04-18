@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering.RenderGraphModule;
-using Unity.Collections;
 
 namespace Prism.Rain
 {
@@ -40,6 +39,7 @@ namespace Prism.Rain
         private static readonly int RainBufferID = Shader.PropertyToID("_RainBuffer");
         private static readonly int LightBufferID = Shader.PropertyToID("_LightBuffer");
         private static readonly int LightCountID = Shader.PropertyToID("_LightCount");
+        private static readonly int RainDropCountID = Shader.PropertyToID("_RainDropCount");
         private static readonly int DeltaTimeID = Shader.PropertyToID("_DeltaTime");
         private static readonly int TimeID = Shader.PropertyToID("_Time");
         private static readonly int FrameCountID = Shader.PropertyToID("_FrameCount");
@@ -48,7 +48,7 @@ namespace Prism.Rain
         private static readonly int HeightMaxID = Shader.PropertyToID("_HeightMax");
         private static readonly int GravityID = Shader.PropertyToID("_Gravity");
         private static readonly int CameraPositionID = Shader.PropertyToID("_CameraPosition");
-        private static readonly int CullDistanceID = Shader.PropertyToID("_CullDistance");
+        private static readonly int CullDistanceSqrID = Shader.PropertyToID("_CullDistanceSqr");
         private static readonly int RainDropScaleID = Shader.PropertyToID("_RainDropScale");
         private static readonly int RainBaseAlphaID = Shader.PropertyToID("_RainBaseAlpha");
         private static readonly int RainLitAlphaID = Shader.PropertyToID("_RainLitAlpha");
@@ -102,7 +102,7 @@ namespace Prism.Rain
         {
             if (isInitialized) return;
 
-            int rainDropStride = sizeof(float) * 12;
+            int rainDropStride = sizeof(float) * 16; // 64 bytes per RainDrop
 
             rainBuffer = new GraphicsBuffer(
                 GraphicsBuffer.Target.Structured,
@@ -141,10 +141,11 @@ namespace Prism.Rain
             threadGroupsX = Mathf.CeilToInt(settings.rainDropCount / (float)THREAD_GROUP_SIZE);
 
             // Initialize rain drops (one-time setup)
+            computeShader.SetInt(RainDropCountID, settings.rainDropCount);
             computeShader.SetFloat(SpawnRadiusID, settings.spawnRadius);
             computeShader.SetFloat(HeightMinID, settings.heightMin);
             computeShader.SetFloat(HeightMaxID, settings.heightMax);
-            computeShader.SetVector(CameraPositionID, Vector3.zero); // 初期化時は原点
+            computeShader.SetVector(CameraPositionID, Vector3.zero);
             computeShader.SetFloat(RainDropScaleID, settings.dropScale);
             computeShader.SetBuffer(initKernelID, DropsID, rainBuffer);
             computeShader.Dispatch(initKernelID, threadGroupsX, 1, 1);
@@ -158,11 +159,14 @@ namespace Prism.Rain
             if (!isInitialized) return;
 
             var cameraData = frameData.Get<UniversalCameraData>();
-            var lightData = frameData.Get<UniversalLightData>();
             var resourceData = frameData.Get<UniversalResourceData>();
 
-            int lightCount = CollectLights(lightData.visibleLights, lightData.additionalLightsCount, lightData.mainLightIndex);
-            lightBuffer.SetData(lightDataArray);
+            int lightCount = CollectLights();
+
+            if (lightCount > 0)
+            {
+                lightBuffer.SetData(lightDataArray, 0, 0, lightCount);
+            }
 
             frameCount++;
 
@@ -185,8 +189,6 @@ namespace Prism.Rain
                 builder.UseBuffer(passData.lightBufferHandle, AccessFlags.Read);
 
                 // Declare render target usage (required for UnsafePass)
-                // Color: Write (drawing rain particles)
-                // Depth: Read (for depth testing, ZWrite is Off in shader)
                 builder.UseTexture(passData.colorTarget, AccessFlags.Write);
                 builder.UseTexture(passData.depthTarget, AccessFlags.Read);
 
@@ -214,17 +216,15 @@ namespace Prism.Rain
 
                 builder.SetRenderFunc((PassData data, UnsafeGraphContext context) =>
                 {
-                    // Set render target using UnsafeCommandBuffer (accepts TextureHandle directly)
-                    // Reference: https://docs.unity3d.com/6000.0/Documentation/Manual/urp/render-graph-unsafe-pass.html
                     context.cmd.SetRenderTarget(data.colorTarget, data.depthTarget);
 
-                    // Get native CommandBuffer for other operations
                     CommandBuffer cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
 
                     // Reset AppendBuffer counter
                     cmd.SetBufferCounterValue(data.visibleRainBuffer, 0);
 
                     // Set compute parameters
+                    cmd.SetComputeIntParam(data.computeShader, RainDropCountID, data.settings.rainDropCount);
                     cmd.SetComputeFloatParam(data.computeShader, DeltaTimeID, data.deltaTime);
                     cmd.SetComputeFloatParam(data.computeShader, TimeID, data.time);
                     cmd.SetComputeIntParam(data.computeShader, FrameCountID, (int)data.frameCount);
@@ -235,10 +235,15 @@ namespace Prism.Rain
                     cmd.SetComputeFloatParam(data.computeShader, HeightMaxID, data.settings.heightMax);
 
                     cmd.SetComputeFloatParam(data.computeShader, GravityID, data.settings.gravity);
-                    cmd.SetComputeFloatParam(data.computeShader, CullDistanceID, data.settings.cullDistance);
+                    cmd.SetComputeFloatParam(data.computeShader, CullDistanceSqrID,
+                        data.settings.cullDistance * data.settings.cullDistance);
                     cmd.SetComputeFloatParam(data.computeShader, RainDropScaleID, data.settings.dropScale);
                     cmd.SetComputeVectorParam(data.computeShader, CameraPositionID, data.cameraPosition);
                     cmd.SetComputeMatrixParam(data.computeShader, ViewProjectionMatrixID, data.viewProjectionMatrix);
+
+                    // Set light data for compute
+                    cmd.SetComputeIntParam(data.computeShader, LightCountID, data.lightCount);
+                    cmd.SetComputeBufferParam(data.computeShader, data.updateKernelID, LightBufferID, data.lightBuffer);
 
                     // Set compute buffers
                     cmd.SetComputeBufferParam(data.computeShader, data.updateKernelID, DropsID, data.rainBuffer);
@@ -252,8 +257,6 @@ namespace Prism.Rain
 
                     // Set material properties
                     data.rainMaterial.SetBuffer(RainBufferID, data.visibleRainBuffer);
-                    data.rainMaterial.SetBuffer(LightBufferID, data.lightBuffer);
-                    data.rainMaterial.SetInt(LightCountID, data.lightCount);
                     data.rainMaterial.SetFloat(RainBaseAlphaID, data.settings.baseAlpha);
                     data.rainMaterial.SetFloat(RainLitAlphaID, data.settings.litAlpha);
 
@@ -263,51 +266,27 @@ namespace Prism.Rain
             }
         }
 
-        private int CollectLights(NativeArray<VisibleLight> visibleLights, int additionalLightsCount, int mainLightIndex)
+        private int CollectLights()
         {
+            var activeInstances = RainAdditionalLight.ActiveInstances;
             int lightCount = 0;
-            int additionalLightIndex = 0;
 
-            for (int i = 0; i < MAX_RAIN_LIGHTS; i++)
+            for (int i = 0; i < activeInstances.Count && lightCount < MAX_RAIN_LIGHTS; i++)
             {
-                lightDataArray[i] = default;
-            }
+                var rainLight = activeInstances[i];
+                if (rainLight == null) continue;
 
-            int maxIndex = Mathf.Min(visibleLights.Length, additionalLightsCount + 1);
-            for (int i = 0; i < maxIndex && lightCount < MAX_RAIN_LIGHTS; i++)
-            {
-                // Skip main light (it's not an additional light)
-                if (i == mainLightIndex)
-                    continue;
+                var light = rainLight.Light;
+                if (light == null) continue;
 
-                Light light = visibleLights[i].light;
-                if (light == null)
-                {
-                    additionalLightIndex++;
+                if (!light.enabled || !light.gameObject.activeInHierarchy)
                     continue;
-                }
-
-                if (!light.TryGetComponent<RainAdditionalLight>(out var rainLight))
-                {
-                    additionalLightIndex++;
-                    continue;
-                }
-
-                if (!rainLight.enabled || !rainLight.gameObject.activeInHierarchy)
-                {
-                    additionalLightIndex++;
-                    continue;
-                }
 
                 if (light.type != LightType.Point && light.type != LightType.Spot)
-                {
-                    additionalLightIndex++;
                     continue;
-                }
 
-                lightDataArray[lightCount] = RainLightData.FromLight(light, additionalLightIndex);
+                lightDataArray[lightCount] = RainLightData.FromLight(light, lightCount);
                 lightCount++;
-                additionalLightIndex++;
             }
 
             return lightCount;
