@@ -2,6 +2,7 @@
   "dependencies": {
     "com.cqf.urpvolumetricfog": "https://github.com/CristianQiu/Unity-URP-Volumetric-Light.git",
     "com.tang3cko.scenes-in-build-editor": "https://github.com/tang3cko/ScenesInBuildEditor.git?path=Packages/com.tang3cko.scenes-in-build-editor",
+    "com.unity.ai.assistant": "2.6.0-pre.1",
     "com.unity.ai.navigation": "2.0.11",
     "com.unity.collab-proxy": "2.11.4",
     "com.unity.ide.rider": "3.0.39",
