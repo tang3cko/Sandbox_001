@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace Prism.Reflection
@@ -31,6 +32,8 @@ namespace Prism.Reflection
         [Tooltip("Draw debug gizmos in Scene view")]
         [SerializeField] private bool drawGizmos = true;
 
+        public event Action OnUpdated;
+
         private LineRenderer lineRenderer;
         private readonly Vector3[] points = new Vector3[12]; // maxReflections + 2
         private int pointCount;
@@ -39,11 +42,16 @@ namespace Prism.Reflection
         {
             lineRenderer = GetComponent<LineRenderer>();
             ConfigureLineRenderer();
+            CastLaser();
         }
 
-        private void Update()
+        /// <summary>
+        /// Recalculates the laser path. Call when emitter or reflectors change.
+        /// </summary>
+        public void RequestUpdate()
         {
             CastLaser();
+            OnUpdated?.Invoke();
         }
 
         /// <summary>
