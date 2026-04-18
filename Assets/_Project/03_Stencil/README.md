@@ -141,6 +141,12 @@ This approach decouples stencil configuration from the shader itself.
 
 ---
 
+## Unity 6.5 Migration Note
+
+Unity 6.5 (Beta as of 2026-04) is expected to add stencil operations to Shader Graph ([Unite 2025 Roadmap](https://zenn.dev/m_hatayama/articles/ba4990c542a47c)). Once released, the hand-written HLSL shaders can be replaced with Shader Graph equivalents. Combining Shader Graph materials with the Render Objects stencil override becomes a viable alternative.
+
+---
+
 ## Dependencies
 
 - Unity 6
