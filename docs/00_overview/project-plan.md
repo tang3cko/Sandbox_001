@@ -51,17 +51,17 @@ Hidden text becomes visible only where light shines (Closure-style effect). This
 
 You use the following technologies:
 
-- Stencil buffer
-- Shader Graph
-- URP Render Features
+- Stencil buffer (bit 1, `Ref 2` / `WriteMask 2` / `ReadMask 2` for URP-safe isolation)
+- Hand-written HLSL shaders (Shader Graph does not support stencil operations as of Unity 6)
+- Render queue ordering (`Geometry-1` for mask, `Geometry` for content)
 
 You implement the effect as follows:
 
-- Mask Shader: Write a specific value (e.g., 1) to stencil buffer without rendering
-- Content Shader: Render only where stencil value equals 1 (`Stencil Comparison: Equal`)
-- Render Objects (URP): Control draw order to render mask before content
+- Mask Shader (`Prism/Stencil/Mask`): Write stencil bit 1 with `ColorMask 0` (invisible) and `ZWrite Off`
+- Content Shader (`Prism/Stencil/Content`): Render only where stencil bit 1 is set (`Stencil Comparison: Equal`)
+- Render queue ordering ensures mask evaluates before content without Render Objects configuration
 
-You learn portal effects and X-ray vision techniques.
+You learn portal effects, X-ray vision techniques, and stencil buffer bit management in URP.
 
 ---
 
@@ -113,7 +113,9 @@ Assets/
 ├── 01_Reflection/        # Lv.1 Laser reflection
 ├── 02_RenderingTest/     # Lv.2 Rendering load experiment
 ├── 03_Stencil/           # Lv.3 Stencil mask effects
-└── 04_ShadowMesh/        # Lv.4 Dynamic shadow mesh
+├── 04_ShadowMesh/        # Lv.4 Dynamic shadow mesh
+├── 05_Rain/              # GPU-based rain rendering (Compute Shader + RenderGraph)
+└── 06_DitherTransparency/# Dither transparency (planned)
 ```
 
 ---
