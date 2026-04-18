@@ -66,8 +66,8 @@ Reflector (Marker Component)
 ## Usage
 
 1. Create an empty GameObject and add `LaserEmitter` component
-2. Create a material using `Prism/Laser` shader
-3. Assign the material to the auto-added `LineRenderer`
+2. Assign the `Laser.mat` material (uses `Prism/Laser` shader)
+3. Assign it to the auto-added `LineRenderer`
 4. Place objects with `Collider` in the scene
 5. Add `Reflector` component to objects that should reflect the laser
 
