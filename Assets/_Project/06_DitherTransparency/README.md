@@ -12,7 +12,7 @@ When a character is occluded by an object, dithering creates a pseudo-transparen
 
 ## Goals
 
-- [ ] Shader Graph version
+- [x] Shader Graph version
 - [x] HLSL version
 - [ ] Compare performance and readability between both approaches
 
@@ -29,11 +29,13 @@ When a character is occluded by an object, dithering creates a pseudo-transparen
 ├── Scenes/
 │   └── DitherTransparency.unity    # Camera + player capsule + occluder walls
 ├── Shaders/
-│   ├── ShaderGraph/                # (planned)
+│   ├── ShaderGraph/
+│   │   └── DitherTransparencySG.shadergraph  # Lit + Dither node + Alpha Clip
 │   └── HLSL/
 │       └── DitherTransparency.shader  # 4x4 Bayer dither clip (Forward/Shadow/Depth passes)
 ├── Materials/
-│   ├── DitherWall.mat
+│   ├── DitherWall.mat              # HLSL version (Wall_Center, Wall_Back)
+│   ├── DitherWallSG.mat            # Shader Graph version (Wall_Left)
 │   ├── Player.mat
 │   └── Ground.mat
 └── Scripts/
@@ -49,9 +51,19 @@ When a character is occluded by an object, dithering creates a pseudo-transparen
 - ShadowCaster / DepthOnly passes apply the same dither, so shadows lighten as
   the occluder fades
 - Edit mode support via `[ExecuteAlways]` + `Physics.SyncTransforms()` before queries
+- Shader Graph version: Lit target + built-in Dither node into Alpha with
+  Alpha Clip Threshold ~0 — same `clip(alpha - threshold)` structure. Note the
+  SG Dither node uses a /17-normalized Bayer matrix vs /16 in the HLSL version,
+  and the circular hole mode is HLSL-only for now (`_DitherAlpha` works on both)
 - Two fade modes on `DitherOcclusionFader`:
   - `WholeObject` — uniform dither across the occluding renderer
   - `CircularHole` — screen-space circular cutout around the target's viewport
     position (`GetNormalizedScreenSpaceUV` + aspect-corrected distance +
     `smoothstep` edge); the hole is view-dependent, so the ShadowCaster pass
     intentionally ignores it and shadows stay intact
+
+> [!WARNING]
+> `CircularHole` mode drives the HLSL-only hole properties (`_HoleRadius` etc.).
+> Renderers using the Shader Graph material (`DitherWallSG`, e.g. Wall_Left) do
+> NOT visibly fade in this mode — the properties simply don't exist there.
+> Switch `Fade Mode` to `WholeObject` to see the Shader Graph version fade.
