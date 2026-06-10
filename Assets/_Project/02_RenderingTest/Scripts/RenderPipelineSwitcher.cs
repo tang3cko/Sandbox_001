@@ -6,7 +6,7 @@ namespace Prism.RenderingTest
 {
     /// <summary>
     /// Switches between different URP Pipeline Assets at runtime.
-    /// Each asset should be configured with a different rendering mode (Forward/Forward+/Deferred).
+    /// Each asset should be configured with a different rendering mode (Forward/Forward+/Deferred/Deferred+).
     /// </summary>
     public sealed class RenderPipelineSwitcher : MonoBehaviour
     {
@@ -14,7 +14,8 @@ namespace Prism.RenderingTest
         {
             Forward = 0,
             ForwardPlus = 1,
-            Deferred = 2
+            Deferred = 2,
+            DeferredPlus = 3
         }
 
         [System.Serializable]
@@ -31,7 +32,8 @@ namespace Prism.RenderingTest
         {
             new PipelineConfig { name = "Forward", mode = RenderingMode.Forward },
             new PipelineConfig { name = "Forward+", mode = RenderingMode.ForwardPlus },
-            new PipelineConfig { name = "Deferred", mode = RenderingMode.Deferred }
+            new PipelineConfig { name = "Deferred", mode = RenderingMode.Deferred },
+            new PipelineConfig { name = "Deferred+", mode = RenderingMode.DeferredPlus }
         };
 
         private int currentIndex;

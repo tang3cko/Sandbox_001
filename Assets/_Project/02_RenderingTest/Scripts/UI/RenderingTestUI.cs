@@ -107,6 +107,10 @@ namespace Prism.RenderingTest.UI
                     pipelineSwitcher?.SetMode(2);
                     evt.StopPropagation();
                     break;
+                case KeyCode.Alpha4:
+                    pipelineSwitcher?.SetMode(3);
+                    evt.StopPropagation();
+                    break;
 
                 // Light controls
                 case KeyCode.UpArrow:
@@ -163,7 +167,7 @@ namespace Prism.RenderingTest.UI
         {
             if (modeDropdown == null || pipelineSwitcher == null) return;
 
-            var choices = new List<string> { "Forward", "Forward+", "Deferred" };
+            var choices = new List<string> { "Forward", "Forward+", "Deferred", "Deferred+" };
             modeDropdown.choices = choices;
             modeDropdown.index = (int)pipelineSwitcher.CurrentMode;
 

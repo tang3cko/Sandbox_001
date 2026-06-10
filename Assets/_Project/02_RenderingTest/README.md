@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Rendering pipeline comparison tool using runtime URP asset switching. Explores Forward, Forward+, and Deferred rendering trade-offs with dynamic light spawning.
+Rendering pipeline comparison tool using runtime URP asset switching. Explores Forward, Forward+, Deferred, and Deferred+ rendering trade-offs with dynamic light spawning.
 
 ---
 
 ## Features
 
-- **Runtime Pipeline Switching**: Switch between Forward/Forward+/Deferred without restarting
+- **Runtime Pipeline Switching**: Switch between Forward/Forward+/Deferred/Deferred+ without restarting
 - **Dynamic Light Spawning**: Add/remove point lights to observe performance impact
 - **Performance Stats Display**: Real-time FPS, Draw Calls, Batches, SetPass monitoring
 - **Light Animation**: Optional position animation to stress-test dynamic lighting
@@ -77,7 +77,7 @@ RenderingTestUI (UI Toolkit controller)
 
 ## Usage
 
-1. Create URP Assets for Forward, Forward+, Deferred (Settings folder contains examples)
+1. Create URP Assets for Forward, Forward+, Deferred, Deferred+ (Settings folder contains examples)
 2. Create scene with floor and objects
 3. Add `RenderPipelineSwitcher` and `LightSpawner` components
 4. Add `UIDocument` with `RenderingTestHUD.uxml` and `RenderingTestUI` component
@@ -89,7 +89,7 @@ RenderingTestUI (UI Toolkit controller)
 | Key | Action |
 |-----|--------|
 | `R` | Cycle rendering mode |
-| `1` / `2` / `3` | Direct select Forward / Forward+ / Deferred |
+| `1` / `2` / `3` / `4` | Direct select Forward / Forward+ / Deferred / Deferred+ |
 | `Up` / `Down` | Add / Remove lights |
 | `A` | Toggle light animation |
 | `F1` | Toggle UI visibility |
