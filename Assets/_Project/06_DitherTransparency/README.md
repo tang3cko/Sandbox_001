@@ -14,13 +14,47 @@ When a character is occluded by an object, dithering creates a pseudo-transparen
 
 - [x] Shader Graph version
 - [x] HLSL version
-- [ ] Compare performance and readability between both approaches
+- [x] Compare performance and readability between both approaches
 
 ## Key Concepts
 
 - Depth-based dithering
 - Screen-space dither patterns
 - Per-instance coordinate handling (for GPU instancing support)
+
+## Comparison: HLSL vs Shader Graph
+
+Measured in this project (Unity 6000.3 / URP 17.3):
+
+| Metric | HLSL | Shader Graph |
+|--------|-----:|-------------:|
+| Passes | 3 (ForwardLit, ShadowCaster, DepthOnly) | 10 (Forward, GBuffer, ShadowCaster, MotionVectors, DepthOnly, DepthNormals, Meta, +editor/2D) |
+| Shader keywords | 7 | 50 |
+| File size | 216 lines (all hand-written) | 878 lines JSON (~10 nodes in the graph view) |
+
+### Performance
+
+- The dither itself costs the same in both (one Bayer lookup + `clip`)
+- The SG version generates the full URP Lit feature set: PBR specular, GI,
+  lightmaps, additional lights, fog, decals — heavier per pixel than the
+  hand-written Lambert-only lighting
+- 50 keywords vs 7 means a much larger variant space → slower builds and
+  in-editor compiles (build-time stripping mitigates the shipped size)
+- Extra SG passes are not free wins or losses: GBuffer enables Deferred
+  (the HLSL version is forward-only), DepthNormals enables SSAO,
+  MotionVectors enables TAA/motion blur; editor-only passes never ship
+
+### Readability / Maintainability
+
+- **HLSL**: every line is explicit and diffable in git; full control
+  (the circular hole mode exists only here); but you own the URP boilerplate
+  and must track pipeline changes yourself (e.g. it lacks MotionVectors today)
+- **Shader Graph**: ~10 nodes read at a glance, auto-tracks URP updates,
+  features come for free; but the asset is opaque JSON in code review, and
+  custom logic like the hole needs a node forest or a Custom Function node
+
+**Takeaway**: SG for standard surfaces that should keep up with URP features;
+HLSL when you need precise control, minimal cost, or non-standard tricks.
 
 ## Directory Structure
 
