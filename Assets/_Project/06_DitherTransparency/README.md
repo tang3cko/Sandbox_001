@@ -13,7 +13,7 @@ When a character is occluded by an object, dithering creates a pseudo-transparen
 ## Goals
 
 - [ ] Shader Graph version
-- [ ] HLSL version
+- [x] HLSL version
 - [ ] Compare performance and readability between both approaches
 
 ## Key Concepts
@@ -27,9 +27,31 @@ When a character is occluded by an object, dithering creates a pseudo-transparen
 ```text
 06_DitherTransparency/
 ├── Scenes/
+│   └── DitherTransparency.unity    # Camera + player capsule + occluder walls
 ├── Shaders/
-│   ├── ShaderGraph/
+│   ├── ShaderGraph/                # (planned)
 │   └── HLSL/
+│       └── DitherTransparency.shader  # 4x4 Bayer dither clip (Forward/Shadow/Depth passes)
 ├── Materials/
+│   ├── DitherWall.mat
+│   ├── Player.mat
+│   └── Ground.mat
 └── Scripts/
+    └── DitherOcclusionFader.cs     # SphereCast occlusion detection + per-renderer MPB fade
 ```
+
+## Implementation Notes (HLSL version)
+
+- Stays in the Opaque queue: `clip()` against a screen-space 4x4 Bayer threshold,
+  so depth writes and sorting remain opaque-correct (no draw order issues)
+- `DitherOcclusionFader` fades only renderers actually occluding the target via
+  MaterialPropertyBlock, so other instances sharing the material stay opaque
+- ShadowCaster / DepthOnly passes apply the same dither, so shadows lighten as
+  the occluder fades
+- Edit mode support via `[ExecuteAlways]` + `Physics.SyncTransforms()` before queries
+- Two fade modes on `DitherOcclusionFader`:
+  - `WholeObject` — uniform dither across the occluding renderer
+  - `CircularHole` — screen-space circular cutout around the target's viewport
+    position (`GetNormalizedScreenSpaceUV` + aspect-corrected distance +
+    `smoothstep` edge); the hole is view-dependent, so the ShadowCaster pass
+    intentionally ignores it and shadows stay intact
